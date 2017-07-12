@@ -1,0 +1,117 @@
+---
+title: "Rossmann Store Sales: Part 1, Data Cleaning and Exploratory Analysis"
+author: "Sophie Yang"
+date: "7/7/2017"
+output: html_document
+---
+
+### Introductory Summary
+
+Rossmann operates over 3,000 drug stores in 7 European countries. Currently, Rossmann store managers are tasked with predicting their daily sales for up to six weeks in advance. Store sales are influenced by many factors, including promotions, competition, school and state holidays, seasonality, and locality. With thousands of individual managers predicting sales based on their unique circumstances, the accuracy of results can be quite varied.
+
+In their first Kaggle competition, Rossmann is challenging you to predict 6 weeks of daily sales for 1,115 stores located across Germany. Reliable sales forecasts enable store managers to create effective staff schedules that increase productivity and motivation. By helping Rossmann create a robust prediction model, you will help store managers stay focused on what’s most important to them: their customers and their teams!
+
+```{r results='hide', message=FALSE, warning=FALSE}
+# Load libraries and dataset
+library(lattice)
+library(ggplot2)
+library(caret)
+library(plyr)
+library(lubridate)
+library(xgboost)
+library(stats)
+library(tseries)
+library(gridExtra)
+library(grid)
+library(astsa)
+library(stats)
+library(forecast)
+
+# Get files
+train <- read.csv("train.csv")
+test <- read.csv("test.csv")
+store <- read.csv("store.csv")
+
+```
+
+Join information from the store data and the the training or testing data to informatively combine them.
+
+```{r}
+# Join the information from training and test set with info from store
+trainStore <- join(train, store, by = "Store")
+testStore <- join(test, store, by = "Store")
+
+# Date ranges
+summary(as.Date(trainStore$Date))
+summary(as.Date(testStore$Date))
+```
+
+Here we instantiate a series of exploratory analysis to help clean up the data for analysis.
+
+```{r}
+####################################################################################
+### Exploratory Analysis
+### 1. Remove outliers
+### 2. Reassign NAs
+####################################################################################
+StoreSaleMean <- aggregate(Sales~Store, data = trainStore, FUN = mean)
+StoreSaleMedian <- aggregate(Sales~Store, data = trainStore, FUN = median)
+
+# Convert to Time Series
+trainStore$Date <- as.Date(trainStore$Date)
+trainStore$DayOfWeek <- as.character(trainStore$DayOfWeek)
+trainStore$DayOfWeek[which(trainStore$DayOfWeek == "1")] <- "Monday"
+trainStore$DayOfWeek[which(trainStore$DayOfWeek == "2")] <- "Tuesday"
+trainStore$DayOfWeek[which(trainStore$DayOfWeek == "3")] <- "Wednesday"
+trainStore$DayOfWeek[which(trainStore$DayOfWeek == "4")] <- "Thursday"
+trainStore$DayOfWeek[which(trainStore$DayOfWeek == "5")] <- "Friday"
+trainStore$DayOfWeek[which(trainStore$DayOfWeek == "6")] <- "Saturday"
+trainStore$DayOfWeek[which(trainStore$DayOfWeek == "7")] <- "Sunday"
+
+trainStore$DayOfWeek <- as.factor(trainStore$DayOfWeek)
+trainStore$Open <- as.factor(trainStore$Open)
+trainStore$Promo <- as.factor(trainStore$Promo)
+trainStore$SchoolHoliday <- as.factor(trainStore$SchoolHoliday)
+trainStore$Promo2 <- as.factor(trainStore$Promo2)
+
+# Remove all closed stores
+trainStore <- subset(trainStore, trainStore$Open == 1)
+
+# Check all NAs in 
+apply(trainStore,2,function(x) sum(is.na(x)))
+
+```
+
+From the above we can see that "CompetitionDistance", "CompetitionOpenSinceMonth", "CompetitionOpenSinceYear", "Promo2SinceWeek", and "Promo2SinceYear" have NaNs. This is a good start, as we can start with a simple model and move past that.
+
+## Testing Data
+
+```{r}
+############################
+# Do the same for test data
+############################
+
+# Convert to Time Series
+testStore$Date <- as.Date(testStore$Date)
+testStore$DayOfWeek <- as.character(testStore$DayOfWeek)
+testStore$DayOfWeek[which(testStore$DayOfWeek == "1")] <- "Monday"
+testStore$DayOfWeek[which(testStore$DayOfWeek == "2")] <- "Tuesday"
+testStore$DayOfWeek[which(testStore$DayOfWeek == "3")] <- "Wednesday"
+testStore$DayOfWeek[which(testStore$DayOfWeek == "4")] <- "Thursday"
+testStore$DayOfWeek[which(testStore$DayOfWeek == "5")] <- "Friday"
+testStore$DayOfWeek[which(testStore$DayOfWeek == "6")] <- "Saturday"
+testStore$DayOfWeek[which(testStore$DayOfWeek == "7")] <- "Sunday"
+
+testStore$DayOfWeek <- as.factor(testStore$DayOfWeek)
+testStore$Open <- as.factor(testStore$Open)
+testStore$Promo <- as.factor(testStore$Promo)
+testStore$SchoolHoliday <- as.factor(testStore$SchoolHoliday)
+testStore$Promo2 <- as.factor(testStore$Promo2)
+
+# Remove all closed stores
+# testStore <- subset(testStore, testStore$Open == 1)
+
+# Check all NAs in 
+apply(testStore,2,function(x) sum(is.na(x)))
+```
+
